@@ -1,0 +1,23 @@
+#/bin/bash
+
+cd repo 
+
+python -m venv venv
+
+source venv/bin/activate
+
+pip install numpy pyjags
+
+pip install jupyter==1.0.0 markupsafe==2.0.1 > /dev/null
+
+pip install -r requirements.txt --ignore-installed
+pip install -e .
+
+pip install pyjags
+
+jupyter notebook --ip '0.0.0.0' &
+
+echo "source /home/vagrant/repo/venv/bin/activate" >> /home/vagrant/.bashrc
+echo "jupyter notebook list" >> /home/vagrant/.bashrc
+
+sleep 3 && jupyter notebook list

@@ -1,0 +1,6 @@
+#!/bin/bash
+sudo apt --assume-yes update
+sudo apt --assume-yes upgrade
+sudo apt --assume-yes dist-upgrade
+sudo apt --assume-yes autoremove
+sudo apt --assume-yes autoclean

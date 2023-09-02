@@ -1,0 +1,14 @@
+#!/bin/bash -l
+
+echo "apt.packages $@"
+
+apt-get update -qq
+apt-get install -qq \
+    mlocate=0.26-3ubuntu3 \
+    screen=4.8.0-1ubuntu0.1 \
+    saidar=0.92-2 \
+    libssl-dev \
+    make=4.2.1-1.2 \
+    gcc=4:9.3.0-1ubuntu2 \
+    g++=4:9.3.0-1ubuntu2 \
+    &> /dev/null
