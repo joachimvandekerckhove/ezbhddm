@@ -1,7 +1,5 @@
 vm/secrets/
 vm/.vagrant/
-figures/
-cache/
 sandbox/
 *.pkl
 
