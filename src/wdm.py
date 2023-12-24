@@ -1,3 +1,5 @@
+# Wrapper for simple DDM simulator
+
 import ctypes
 import numpy as np
 

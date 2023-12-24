@@ -1,4 +1,4 @@
-# Classes to do simulations
+# Class to do simulations
 
 import numpy as np
 import pandas as pd
@@ -25,7 +25,11 @@ class Hddm_Design:
         self.criterion         = criterion
         self.results           = []
         self.statistics        = {}
+        self.quantile          = []
         self.walltime          = []
+        self.walltime          = []
+        self.errorctr          = 0
+        self.discards          = []
 
     def run(self, iterations = 1, showProgress = True):
         start = len(self.results) + 1
@@ -35,20 +39,45 @@ class Hddm_Design:
             self.sample_data()
             start_time = time.time()
             self.estimate_parameters(silent = True)
+            if self.samples is None:
+                self.errorctr += 1
+                self.discards.append(i)
             self.walltime.append(time.time() - start_time)
-            self.results.append((copy.deepcopy(self.parameter_set), copy.deepcopy(self.estimate)))
+            self.compute_quantile()
+            self.results.append((copy.deepcopy(self.parameter_set),
+                                 copy.deepcopy(self.estimate),
+                                 copy.deepcopy(self.quantile)))
             if showProgress:
                 percent = ((start+i) / stop) * 100
                 cplt = int(np.fix(percent/2))
-                sys.stdout.write(f"\rProgress [{'='*cplt}{' '*(50-cplt)}] {percent:6.2f}%")
+                if self.errorctr:
+                    sys.stdout.write(f"\rProgress [{'='*cplt}{' '*(50-cplt)}] {percent:6.2f}%  (Discarding {self.errorctr})")
+                else:
+                    sys.stdout.write(f"\rProgress [{'='*cplt}{' '*(50-cplt)}] {percent:6.2f}%")
                 sys.stdout.flush()
         sys.stdout.write(f"\n")
         sys.stdout.flush()
         self.compute_statistics()
         return self
 
+    def compute_quantile(self):
+        if self.samples is not None:
+            estimate = self.samples
+            est = parameter_set.Hddm_Parameter_Set()
+            est.bound_mean = np.mean(estimate['bound_mean'] < self.parameter_set.bound_mean)
+            est.drift_mean = np.mean(estimate['drift_mean'] < self.parameter_set.drift_mean)
+            est.nondt_mean = np.mean(estimate['nondt_mean'] < self.parameter_set.nondt_mean)
+            est.bound_sdev = np.mean(estimate['bound_sdev'] < self.parameter_set.bound_sdev)
+            est.drift_sdev = np.mean(estimate['drift_sdev'] < self.parameter_set.drift_sdev)
+            est.nondt_sdev = np.mean(estimate['nondt_sdev'] < self.parameter_set.nondt_sdev)
+            est.betaweight = np.mean(estimate['betaweight'] < self.parameter_set.betaweight)
+            self.quantile  = est
+        else:
+            self.quantile  = None
+        return
+
     def compute_statistics(self):
-        error = [(a-b).betaweight for a, b in self.results if a is not None and b is not None]
+        error = [(a-b).betaweight for a, b, _ in self.results if a is not None and b is not None]
         self.statistics['mean_error'] = np.mean(error)
         self.statistics['mse']        = np.mean(np.array(error)**2)
         self.statistics['rmse']       = np.sqrt(self.statistics['mse'])
@@ -89,7 +118,12 @@ class Hddm_Design:
         return
 
     def estimate_parameters(self, silent = False):
-        self.estimate = ezhbddm.estimate(self.data, self.prior, self.criterion, silent)
+        try:
+            self.estimate, self.samples = ezhbddm.estimate(self.data, self.prior, self.criterion, silent)
+        except TypeError as e:
+            print(f"An error occurred during parameter estimation: {e}")
+            self.estimate = None
+            self.samples  = None
         return
 
     def __str__(self):

@@ -1,4 +1,4 @@
-# Classes to do simulations
+# Class to handle HDDM parameter sets
 
 import numpy as np
 import pandas as pd
@@ -27,7 +27,7 @@ class Hddm_Parameter_Set:
     @staticmethod
     def random(prior, n_Participants = None, criterion = None, predictor = 0):
         parameter_set = Hddm_Parameter_Set()
-        parameter_set.betaweight = np.random.normal (prior.betaweight_mean , prior.betaweight_sdev)
+        parameter_set.betaweight = np.random.uniform(prior.betaweight_lower, prior.betaweight_upper)
         parameter_set.bound_mean = np.random.normal (prior.bound_mean_mean , prior.bound_mean_sdev)
         parameter_set.drift_mean = np.random.normal (prior.drift_mean_mean , prior.drift_mean_sdev)
         parameter_set.nondt_mean = np.random.normal (prior.nondt_mean_mean , prior.nondt_mean_sdev)

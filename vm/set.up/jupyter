@@ -6,7 +6,7 @@ python -m venv venv
 
 source venv/bin/activate
 
-pip install numpy pyjags
+pip install numpy wheel
 
 pip install jupyter==1.0.0 markupsafe==2.0.1 > /dev/null
 

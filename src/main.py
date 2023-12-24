@@ -1,4 +1,4 @@
-import importlib
+# Runs a small part of the EZBHDDM simulations
 
 import numpy as np
 import pandas as pd
@@ -10,26 +10,31 @@ import prior
 import simulation
 import ezhbddm
 
-data_set      = importlib.reload(data_set)
-parameter_set = importlib.reload(parameter_set)
-prior         = importlib.reload(prior)
-simulation    = importlib.reload(simulation)
-ezhbddm       = importlib.reload(ezhbddm)
-
-P = np.array([10, 20, 40, 80])
-T = np.array([10, 20, 40, 80])
+# Set the number of participants and trials per participants
+P = np.array([20, 40])
+T = np.array([20, 40])
 
 s = np.empty((len(P), len(T)), dtype=object)
 
+# Select the criterion from ['drift', 'bound', 'nondt']
+criterion = 'drift'
+
+# Select the design from ['ttest', 'linreg']
+design = 'ttest'
+
+# Set up the simulation
 for r, p in enumerate(P):
     for c, t in enumerate(T):
-        s[r, c] = simulation.Hddm_Design(p, t, np.arange(0, p) % 2, 'drift')
+        if design == 'ttest':
+            s[r, c] = simulation.Hddm_Design(p, t, np.arange(0, p) % 2, criterion)
+        if design == 'linreg':
+            s[r, c] = simulation.Hddm_Design(p, t, np.arange(0, p) % 2, criterion)
 
-
-for x in range(20):
+# Run the simulations
+for r, p in enumerate(P):
     for c, t in enumerate(T):
-        for r, p in enumerate(P):
-            #print(f"{(x+1):>2}: Sim(P={p}, T={t})")
-            s[r, c].run(100).report('short')
-            with open('ezbhddm.pkl', 'wb') as f:
-                pickle.dump(s, f)
+        s[r, c].run(100)  # Only 100 runs
+
+# Save the result
+with open(f'../cache/{criterion}_{design}_small.pkl', 'wb') as f:
+    pickle.dump(s, f)

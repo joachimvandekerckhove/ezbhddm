@@ -1,4 +1,4 @@
-# Classes to do simulations
+# EZHBDDM base fumction for posterior sampling
 
 import numpy as np
 import pandas as pd
@@ -12,7 +12,7 @@ def ez_jags_code(prior, criterion, version = 'base'):
         code = f"""
         model {{
             # Priors for the hierarchical diffusion model parameters
-            betaweight ~ dnorm({prior.betaweight_mean},  {prior.betaweight_sdev**-2})
+            betaweight ~ dunif({prior.betaweight_lower}, {prior.betaweight_upper})
             bound_mean ~ dnorm({prior.bound_mean_mean},  {prior.bound_mean_sdev**-2}) T( 0.10, 3.00)
             drift_mean ~ dnorm({prior.drift_mean_mean},  {prior.drift_mean_sdev**-2}) T(-3.00, 3.00)
             nondt_mean ~ dnorm({prior.nondt_mean_mean},  {prior.nondt_mean_sdev**-2}) T( 0.05,)
@@ -36,7 +36,6 @@ def ez_jags_code(prior, criterion, version = 'base'):
                 correct[p] ~ dbin(Pc[p], nTrials[p])
                 varRT[p]   ~ dnorm(1/PRT[p], 0.5 * (correct[p]-1) * PRT[p] * PRT[p])
                 meanRT[p]  ~ dnorm(MRT[p], PRT[p] * correct[p])
-                #meanRT[p]  ~ dnorm(MRT[p], correct[p]/varRT[p])
                 #varRT[p]   ~ dnorm(1/PRT[p], 0.5 * correct[p] * PRT[p] * PRT[p])
                 #varRT[p]   ~ dgamma(2/(PRT[p]*(correct[p]-1)), 2/(correct[p]-1))
             }}
@@ -47,9 +46,9 @@ def ez_jags_code(prior, criterion, version = 'base'):
         model {{
             # Priors for the hierarchical diffusion model parameters
             for (b in 1:B) {{
-                betaweightB[1,b] ~ dnorm({prior.betaweight_mean},  {prior.betaweight_sdev**-2})
-                betaweightD[1,b] ~ dnorm({prior.betaweight_mean},  {prior.betaweight_sdev**-2})
-                betaweightN[1,b] ~ dnorm({prior.betaweight_mean},  {prior.betaweight_sdev**-2})
+                betaweightB[1,b] ~ dunif({prior.betaweight_lower}, {prior.betaweight_upper})
+                betaweightD[1,b] ~ dunif({prior.betaweight_lower}, {prior.betaweight_upper})
+                betaweightN[1,b] ~ dunif({prior.betaweight_lower}, {prior.betaweight_upper})
             }}
             bound_mean ~ dnorm({prior.bound_mean_mean},  {prior.bound_mean_sdev**-2}) T( 0.10, 3.00)
             drift_mean ~ dnorm({prior.drift_mean_mean},  {prior.drift_mean_sdev**-2}) T(-3.00, 3.00)
@@ -101,15 +100,12 @@ def estimate(dataObject, priorObject, criterion = 'drift', silent = False):
                 chains  = 4,
                 threads = 4)
     except Exception as e:
-        if silent:
-            print('e', end='')
-        else:
+        if not silent:
             error_message = str(e)
             print(type(error_message))
             print(error_message)
-            data.summary()
-            print(data.to_jags())
-        return
+            print(data)
+        return None, None
 
     samples = model.sample(400,
                            vars = ['bound_mean', 'drift_mean', 'nondt_mean',
@@ -155,5 +151,5 @@ def estimate(dataObject, priorObject, criterion = 'drift', silent = False):
     est.nondt      = estimate['nondt']
     est.betaweight = estimate['betaweight']
 
-    return est
+    return est, samples
 
