@@ -79,9 +79,9 @@ ez_summaries <- function(subset){
   cond <- unique(subset$cond)
   # Return relevant summary statistics
   return(data.frame("nTrials" = nrow(subset),
-                    "accRate" = sum(subset$response),
-                    "meanRT"  = mean(subset$RT)/1000,
-                    "varRT"   = var(subset$RT/1000),
+                    "score" = sum(subset$response),
+                    "meanRT"  = mean(subset$RT[which(subset$response==1)])/1000,
+                    "varRT"   = var(subset$RT[which(subset$response==1)]/1000),
                   # Index variable: Accuracy (-0.5) vs Speed (0.5) condition
                     "Xi"  = as.integer(cond>33)-0.5,
                   # Arbitrary scale of stimulus configuration | 0 is 50/50 black and white 
@@ -226,13 +226,16 @@ samples <- jags(data=data_toJAGS,
 ### Extract samples
 
 ```{r}
-# 
+##### Drift rate parameters
+# Recovered drift rates
 drift <- samples$BUGSoutput$sims.list$drift
-beta3 <- as.vector(samples$BUGSoutput$sims.list$beta3)
-beta4 <- samples$BUGSoutput$sims.list$beta4
+# Effects of instruction
+beta3 <- as.vector(samples$BUGSoutput$sims.list$beta3) # Main
+beta4 <- samples$BUGSoutput$sims.list$beta4 # Interaction
+# Fitted values / Predicted drift rates
 drift_pred <- samples$BUGSoutput$sims.list$drift_pred
 
-#
+##### Summary statistics sampled
 accRate_hat   <- samples$BUGSoutput$sims.list$Pc
 rtCorMean_hat <- samples$BUGSoutput$sims.list$MRT
 rtCorVar_hat  <- samples$BUGSoutput$sims.list$PRT
@@ -364,19 +367,20 @@ axis(1,seq(0,1.6,0.4),seq(0,1.6,0.4))
 axis(2,seq(0,2,0.5),seq(0,2,0.5),las=2)
 ```
 
-
-### Model predictions vs data
+### Model vs Data
 
 ```{r}
 ### Prepare JAGS output
-est.accRate <- apply(accRate_hat, 2, mean)
-est.rtCorMean <- apply(rtCorMean_hat, 2, mean)
-est.rtCorVar <- apply(rtCorVar_hat, 2, mean)
 
-# Get percentiles to later compute error bars around these means
+# Accuracy rate
+est.accRate <- apply(accRate_hat, 2, mean)
 percentiles <- apply(accRate_hat,2, quantile, probs=c(0.025,0.975))
 lower_percentiles <- percentiles[1,]
 upper_percentiles <- percentiles[2,]
+
+# Mean RT-correct
+est.rtCorMean <- apply(rtCorMean_hat, 2, mean)
+est.rtCorVar <- apply(rtCorVar_hat, 2, mean)
 ```
 
 ```{r}
