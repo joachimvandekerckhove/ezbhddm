@@ -108,13 +108,28 @@ df <- df[-which(df$Xs==0),]
 head(df,3)
 ```
 
-# Run JAGS
+# The model 
 
-### Write JAGS model
+The model incorporates an effect ($\beta$) of instruction (i.e., $x_i$, `Xi`) on the *bound parameter ($\alpha$)*. 
 
-EZ JAGS code with an effect of instruction (`Xi`) on bound and a nonlinear regression using `Xi` and stimulus configuration `Xs`. Note the predictor is the absolute value of `Xs` to capture that the task gets easier as the black/white balance departs from $50\%$.
+\begin{align*}
+\alpha &\sim \mbox{Normal}(\mu_\alpha+\beta X_i,\sigma_\alpha)
+\end{align*}
 
-`Beta3` and `Beta4` capture effects of instruction on `drift` and so are of specific interest.
+We also include a nonlinear regression on the drift rate $\delta$ using instruction (i.e., $x_i$, `Xi`) and stimulus configuration (i.e., $x_s$, `Xs`) as predictors. For the later, we used the absolute value (i.e., $|x_s|$, `abs(Xs)`) to represent the task difficulty getting easier as the black/white balance departs from $50\%$.
+
+\begin{align*}
+Y &= \Phi(\beta_1+\beta_2 |X_s|+\beta_3X_i|X_s|)\\
+\delta_\mbox{pred} &= \mu_\delta+\beta_0 Y+\beta_4 X_i\\
+\delta &\sim \mbox{Normal}(\delta_\mbox{pred},\sigma_\delta)
+\end{align*}
+
+In the present example, we focus on the regression parameters capturing the effects of instruction ($\beta_3$, `Beta3`, and $\beta_4$, `Beta4`).
+
+
+### Write the model in JAGS
+
+EZ JAGS code for the model discussed above:
 
 ```{r}
 model <- write("
@@ -162,6 +177,10 @@ model {
 }", "./model_perception.bug")
 ```
 
+
+# JAGS
+
+
 ### Specify JAGS setup
 
 ```{r}
@@ -186,7 +205,8 @@ for(i in 1:n.chains){
 }
 
 # Specify parameters to keep track of
-parameters <- c('beta3', 'beta4', 'drift', 'drift_pred')
+parameters <- c('beta3', 'beta4', 'drift', 'drift_pred',
+                "Pc", "MRT", "PRT")
 ```
 
 ### Run JAGS
@@ -206,20 +226,161 @@ samples <- jags(data=data_toJAGS,
 ### Extract samples
 
 ```{r}
+# 
 drift <- samples$BUGSoutput$sims.list$drift
-drift_pred <- samples$BUGSoutput$sims.list$drift_pred
 beta3 <- as.vector(samples$BUGSoutput$sims.list$beta3)
 beta4 <- samples$BUGSoutput$sims.list$beta4
+drift_pred <- samples$BUGSoutput$sims.list$drift_pred
+
+#
+accRate_hat   <- samples$BUGSoutput$sims.list$Pc
+rtCorMean_hat <- samples$BUGSoutput$sims.list$MRT
+rtCorVar_hat  <- samples$BUGSoutput$sims.list$PRT
 ```
 
-# Results: Data visualization
+
+# Results
 
 ```{r}
-# Identify values on x axis
+# Identify conditions to plot on x axis
 x_values <- unique(df$Xs)
-# Concatenate x values with a 'jump' on it
+# Insert a 'jump' in between these values
 fit_x <- c(x_values[1:16],NA,x_values[17:32])
+```
 
+### Drift rates predicted and recovered
+
+```{r}
+#### Extract samples for plotting the nonlinear regression
+# Mean drift estimated per condition
+means <- apply(drift, 2, mean)
+# Get percentiles to later compute error bars around these means
+percentiles <- apply(drift,2, quantile, probs=c(0.025,0.975))
+lower_percentiles <- percentiles[1,]
+upper_percentiles <- percentiles[2,]
+# Get mean drift rate predictions (i.e., fitted values)
+preds <- apply(drift_pred,2,mean)
+
+# Stack relevant results in a single data frame
+results <- data.frame(means,lower_percentiles,upper_percentiles, preds)
+# Separate by instruction condition
+acc <- results[1:32,]
+spd <- results[33:64,]
+
+# Calculate the errors for the error bars
+errors_acc <- cbind(acc$means-acc$lower_percentiles, acc$upper_percentiles-acc$means)
+errors_spd <- cbind(spd$means-spd$lower_percentiles, spd$upper_percentiles-spd$means)
+```
+
+```{r}
+### Add a "jump" between conditions for plotting
+# Mean drift rates recovered
+means_acc <- c(acc$means[1:16],NA,acc$means[17:32])
+means_spd <- c(spd$means[1:16],NA,spd$means[17:32])
+# Mean predicted drift rates
+fit_line_acc <- c(acc$preds[1:16],NA,acc$preds[17:32])
+fit_line_spd <- c(spd$preds[1:16],NA,spd$preds[17:32])
+# Lower and upper boundaries of the error bars
+errors_acc <- cbind(c(acc$lower_percentiles[1:16],NA, acc$lower_percentiles[17:32]),
+                    c(acc$upper_percentiles[1:16],NA, acc$upper_percentiles[17:32]))
+errors_spd <- cbind(c(spd$lower_percentiles[1:16],NA, spd$lower_percentiles[17:32]),
+                    c(spd$upper_percentiles[1:16],NA, spd$upper_percentiles[17:32]))
+```
+
+```{r, fig.align='center', out.width="100%"}
+par(mfrow = c(1,2), mai=c(0.9,0.6,1,0.3))
+line.color  <- "darkorange"
+error.color <- "lightblue2"
+
+# Plot for the Accuracy instruction condition
+plot(fit_x,fit_line_acc, type="l", lwd=4, col=line.color, ann=F, axes=F,
+     ylab="Drift rate", ylim=c(0,6),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
+polygon(c(-0.1,0.1,0.1,-0.1),c(0,0,6,6),col = "gray85",
+        border = "gray85", lwd = 3, lty = "solid")
+polygon(c(-3.5,-0.1,-0.1,-3.5),c(0,0,6,6),col = "gray98",
+        border = "gray98", lwd = 3, lty = "solid")
+polygon(c(3.5,0.1,0.1,3.5),c(0,0,6,6),col = "gray98",
+        border = "gray98", lwd = 3, lty = "solid")
+lines(fit_x,fit_line_acc,lwd=4,col=line.color)
+arrows(fit_x,errors_acc[,1], fit_x, errors_acc[,2], length=0.05, angle=90, code=3, col=error.color)
+points(fit_x, means_acc, col=error.color, pch=16, cex=0.7)
+axis(1,c(-2,0,2),c("More black pixels","50/50","More white pixels"), line = 0.1, col.ticks = "white", col="white")
+axis(1,c(-4,-2,0,2,4),c("","","","",""), line=0)
+axis(2,0:6,0:6, las=2)
+mtext("Drift rate", 2, line=2)
+mtext("Accuracy instruction", 3, line=1)
+mtext("Stimulus configuration", 1, line=3)
+box(col="black")
+
+# Plot for the Speed instruction condition
+plot(fit_x,fit_line_spd, type="l", lwd=4, col=line.color, ann=F, axes=F,
+     ylab="Drift rate", ylim=c(0,6),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
+polygon(c(-0.1,0.1,0.1,-0.1),c(0,0,6,6),col = "gray85",
+        border = "gray85", lwd = 3, lty = "solid")
+polygon(c(-3.5,-0.1,-0.1,-3.5),c(0,0,6,6),col = "gray98",
+        border = "gray98", lwd = 3, lty = "solid")
+polygon(c(3.5,0.1,0.1,3.5),c(0,0,6,6),col = "gray98",
+        border = "gray98", lwd = 3, lty = "solid")
+lines(fit_x,fit_line_spd,lwd=4,col=line.color)
+arrows(fit_x,errors_spd[,1], fit_x, errors_spd[,2], length=0.05, angle=90, code=3, col=error.color)
+points(fit_x, means_spd, col=error.color, pch=16, cex=0.7)
+axis(1,c(-2,0,2),c("More black pixels","50/50","More white pixels"), line = 0.1, col.ticks = "white", col="white")
+axis(1,c(-4,-2,0,2,4),c("","","","",""), line=0)
+axis(2,0:6,0:6, las=2)
+mtext("Drift rate", 2, line=2)
+mtext("Speed instruction", 3, line=1)
+mtext("Stimulus configuration", 1, line=3)
+box(col="black")
+
+
+mtext("Predicted and recovered drift rate per condition",3,outer=TRUE, f=2, line=-2, cex=1.8)
+```
+
+### Instruction effect on drift rate slope
+
+```{r}
+hist(beta3, freq = FALSE, breaks = 50, col="lightblue3", border = "lightblue3", ann=F, axes = T)
+lines(density(beta3), lwd=4, col=line.color)
+box(col="black")
+mtext("Instruction effect on drift rate slope", cex=1.2, f=2, side=3, line=0.8)
+legend("topleft",c("Histogram","KDE"),col=c("lightblue3",line.color),lwd=4, cex=1.1, bty = "n")
+mtext("Density",side=2,line=2.15)
+mtext("Beta4",side=1,line=2)
+#axis(1,seq(0,1.6,0.4),seq(0,1.6,0.4))
+#axis(2,seq(0,2,0.5),seq(0,2,0.5),las=2)
+```
+
+### Instruction main effect on drift rate
+
+```{r}
+hist(beta4, freq = FALSE, breaks = 50, col="lightblue3", border = "lightblue3", ann=F, axes = F,xaxs = "i", yaxs = "i", xlim=c(0,1.6), ylim = c(0,2.2))
+lines(density(beta4), lwd=4, col=line.color)
+box(col="black")
+mtext("Instruction main effect on drift rate", cex=1.2, f=2, side=3, line=0.8)
+legend("topleft",c("Histogram","KDE"),col=c("lightblue3",line.color),lwd=4, cex=1.1, bty = "n")
+mtext("Density",side=2,line=2.15)
+mtext("Beta4",side=1,line=2)
+axis(1,seq(0,1.6,0.4),seq(0,1.6,0.4))
+axis(2,seq(0,2,0.5),seq(0,2,0.5),las=2)
+```
+
+
+### Model predictions vs data
+
+```{r}
+### Prepare JAGS output
+est.accRate <- apply(accRate_hat, 2, mean)
+est.rtCorMean <- apply(rtCorMean_hat, 2, mean)
+est.rtCorVar <- apply(rtCorVar_hat, 2, mean)
+
+# Get percentiles to later compute error bars around these means
+percentiles <- apply(accRate_hat,2, quantile, probs=c(0.025,0.975))
+lower_percentiles <- percentiles[1,]
+upper_percentiles <- percentiles[2,]
+```
+
+```{r}
+#### Prepare data
 # Compute accuracy rate per condition from the summary data
 df$acc_rate <- df$sum_accuracy/df$nTrials
 # Separate observed data by accuracy/speed condition
@@ -330,119 +491,4 @@ mtext("Stimulus configuration", 1, line=3)
 box(col="black")
 
 mtext("Mean correct RT per condition",3,outer=TRUE, f=2, line=-2, cex=1.8)
-```
-
-# Results: Drift rates predicted and recoverred
-
-```{r}
-#### Extract samples for plotting the nonlinear regression
-# Mean drift estimated per condition
-means <- apply(drift, 2, mean)
-# Get percentiles to later compute error bars around these means
-percentiles <- apply(drift,2, quantile, probs=c(0.025,0.975))
-lower_percentiles <- percentiles[1,]
-upper_percentiles <- percentiles[2,]
-# Get mean drift rate predictions (i.e., mean fitted value)
-preds <- apply(drift_pred,2,mean)
-
-# Stack relevant results in a single data frame
-results <- data.frame(means,lower_percentiles,upper_percentiles, preds)
-# Separate by instruction condition
-acc <- results[1:32,]
-spd <- results[33:64,]
-
-# Calculate the errors for the error bars
-errors_acc <- cbind(acc$means-acc$lower_percentiles, acc$upper_percentiles-acc$means)
-errors_spd <- cbind(spd$means-spd$lower_percentiles, spd$upper_percentiles-spd$means)
-```
-
-```{r}
-### Defining vectors for plotting
-# Concatenate mean drift rate with a "jump"
-means_acc <- c(acc$means[1:16],NA,acc$means[17:32])
-means_spd <- c(spd$means[1:16],NA,spd$means[17:32])
-# Concatenate predicted drift rate with a "jump"
-fit_line_acc <- c(acc$preds[1:16],NA,acc$preds[17:32])
-fit_line_spd <- c(spd$preds[1:16],NA,spd$preds[17:32])
-# Concatenate into a 2-column matrix the lower and upper boundary of the error bars
-errors_acc <- cbind(c(acc$lower_percentiles[1:16],NA, acc$lower_percentiles[17:32]),
-                    c(acc$upper_percentiles[1:16],NA, acc$upper_percentiles[17:32]))
-errors_spd <- cbind(c(spd$lower_percentiles[1:16],NA, spd$lower_percentiles[17:32]),
-                    c(spd$upper_percentiles[1:16],NA, spd$upper_percentiles[17:32]))
-```
-
-```{r, fig.align='center', out.width="100%"}
-par(mfrow = c(1,2), mai=c(0.9,0.6,1,0.3))
-line.color  <- "darkorange"
-error.color <- "lightblue2"
-
-# Plot for the Accuracy instruction condition
-plot(fit_x,fit_line_acc, type="l", lwd=4, col=line.color, ann=F, axes=F,
-     ylab="Drift rate", ylim=c(0,6),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
-polygon(c(-0.1,0.1,0.1,-0.1),c(0,0,6,6),col = "gray85",
-        border = "gray85", lwd = 3, lty = "solid")
-polygon(c(-3.5,-0.1,-0.1,-3.5),c(0,0,6,6),col = "gray98",
-        border = "gray98", lwd = 3, lty = "solid")
-polygon(c(3.5,0.1,0.1,3.5),c(0,0,6,6),col = "gray98",
-        border = "gray98", lwd = 3, lty = "solid")
-lines(fit_x,fit_line_acc,lwd=4,col=line.color)
-arrows(fit_x,errors_acc[,1], fit_x, errors_acc[,2], length=0.05, angle=90, code=3, col=error.color)
-points(fit_x, means_acc, col=error.color, pch=16, cex=0.7)
-axis(1,c(-2,0,2),c("More black pixels","50/50","More white pixels"), line = 0.1, col.ticks = "white", col="white")
-axis(1,c(-4,-2,0,2,4),c("","","","",""), line=0)
-axis(2,0:6,0:6, las=2)
-mtext("Drift rate", 2, line=2)
-mtext("Accuracy instruction", 3, line=1)
-mtext("Stimulus configuration", 1, line=3)
-box(col="black")
-
-# Plot for the Speed instruction condition
-plot(fit_x,fit_line_spd, type="l", lwd=4, col=line.color, ann=F, axes=F,
-     ylab="Drift rate", ylim=c(0,6),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
-polygon(c(-0.1,0.1,0.1,-0.1),c(0,0,6,6),col = "gray85",
-        border = "gray85", lwd = 3, lty = "solid")
-polygon(c(-3.5,-0.1,-0.1,-3.5),c(0,0,6,6),col = "gray98",
-        border = "gray98", lwd = 3, lty = "solid")
-polygon(c(3.5,0.1,0.1,3.5),c(0,0,6,6),col = "gray98",
-        border = "gray98", lwd = 3, lty = "solid")
-lines(fit_x,fit_line_spd,lwd=4,col=line.color)
-arrows(fit_x,errors_spd[,1], fit_x, errors_spd[,2], length=0.05, angle=90, code=3, col=error.color)
-points(fit_x, means_spd, col=error.color, pch=16, cex=0.7)
-axis(1,c(-2,0,2),c("More black pixels","50/50","More white pixels"), line = 0.1, col.ticks = "white", col="white")
-axis(1,c(-4,-2,0,2,4),c("","","","",""), line=0)
-axis(2,0:6,0:6, las=2)
-mtext("Drift rate", 2, line=2)
-mtext("Speed instruction", 3, line=1)
-mtext("Stimulus configuration", 1, line=3)
-box(col="black")
-
-
-mtext("Predicted and recovered drift rate per condition",3,outer=TRUE, f=2, line=-2, cex=1.8)
-```
-
-# Results: Instruction effect on drift rate slope
-
-```{r}
-hist(beta3, freq = FALSE, breaks = 50, col="lightblue3", border = "lightblue3", ann=F, axes = T)
-lines(density(beta3), lwd=4, col=line.color)
-box(col="black")
-mtext("Instruction effect on drift rate slope", cex=1.2, f=2, side=3, line=0.8)
-legend("topleft",c("Histogram","KDE"),col=c("lightblue3",line.color),lwd=4, cex=1.1, bty = "n")
-mtext("Density",side=2,line=2.15)
-mtext("Beta4",side=1,line=2)
-#axis(1,seq(0,1.6,0.4),seq(0,1.6,0.4))
-#axis(2,seq(0,2,0.5),seq(0,2,0.5),las=2)
-```
-
-# Results: Instruction main effect on drift rate
-```{r}
-hist(beta4, freq = FALSE, breaks = 50, col="lightblue3", border = "lightblue3", ann=F, axes = F,xaxs = "i", yaxs = "i", xlim=c(0,1.6), ylim = c(0,2.2))
-lines(density(beta4), lwd=4, col=line.color)
-box(col="black")
-mtext("Instruction main effect on drift rate", cex=1.2, f=2, side=3, line=0.8)
-legend("topleft",c("Histogram","KDE"),col=c("lightblue3",line.color),lwd=4, cex=1.1, bty = "n")
-mtext("Density",side=2,line=2.15)
-mtext("Beta4",side=1,line=2)
-axis(1,seq(0,1.6,0.4),seq(0,1.6,0.4))
-axis(2,seq(0,2,0.5),seq(0,2,0.5),las=2)
 ```
