@@ -289,9 +289,8 @@ point.size <- 1.2
 plot(fit_x,fit_line_acc, type="l", lwd=4, col=line.color, ann=F, axes=F,
      ylab="Drift rate", ylim=c(0,6),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
 # Gray background
-polygon(c(-0.1,0.1,0.1,-0.1),c(0,0,6,6),col = "gray85", border = "gray85", lwd = 3, lty = "solid")
-polygon(c(-3.5,-0.1,-0.1,-3.5),c(0,0,6,6),col = "gray98", border = "gray98", lwd = 3, lty = "solid")
-polygon(c(3.5,0.1,0.1,3.5),c(0,0,6,6),col = "gray98", border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-3.5,3.5,3.5,-3.5),c(0,0,6,6),col = "gray98", border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-0.04,0.04,0.04,-0.04),c(0,0,6,6),col = "gray85", border = "gray85", lwd = 3, lty = "solid")
 lines(fit_x,fit_line_acc,lwd=4,col=line.color)
 arrows(fit_x,errors_acc[,1], fit_x, errors_acc[,2], length=0.05, angle=90, code=3, col=error.color)
 points(fit_x, means_acc, col=error.color, pch=16, cex=point.size)
@@ -301,17 +300,17 @@ axis(2,0:6,0:6, las=2)
 mtext("Drift rate", 2, line=2)
 mtext("Accuracy instruction", 3, line=1)
 mtext("Stimulus configuration", 1, line=3)
+legend("topleft",c("Predicted drift rates","Mean drifts recovered","Error bars"), col=line.color, lwd=c(4,NA,NA), bty = "n", bg = "gray98", cex=0.8)
+x.marker <- -3.1
+points(x.marker,5.35, col=error.color, pch=16)
+arrows(x.marker,4.93, x.marker, 5.13, length=0.05, angle=90, code=3, col=error.color)
 box(col="black")
 
 # Plot for the Speed instruction condition
 plot(fit_x,fit_line_spd, type="l", lwd=4, col=line.color, ann=F, axes=F,
      ylab="Drift rate", ylim=c(0,6),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
-polygon(c(-0.1,0.1,0.1,-0.1),c(0,0,6,6),col = "gray85",
-        border = "gray85", lwd = 3, lty = "solid")
-polygon(c(-3.5,-0.1,-0.1,-3.5),c(0,0,6,6),col = "gray98",
-        border = "gray98", lwd = 3, lty = "solid")
-polygon(c(3.5,0.1,0.1,3.5),c(0,0,6,6),col = "gray98",
-        border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-3.5,3.5,3.5,-3.5),c(0,0,6,6),col = "gray98", border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-0.04,0.04,0.04,-0.04),c(0,0,6,6),col = "gray85", border = "gray85", lwd = 3, lty = "solid")
 lines(fit_x,fit_line_spd,lwd=4,col=line.color)
 arrows(fit_x,errors_spd[,1], fit_x, errors_spd[,2], length=0.05, angle=90, code=3, col=error.color)
 points(fit_x, means_spd, col=error.color, pch=16, cex=point.size)
@@ -425,12 +424,8 @@ point.size <- 0.9
 # Plot for the Accuracy instructions condition
 plot(fit_x,est.accRate.acc, col="white", 
      ann=F, axes=F, ylim=c(0.45,1.1),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
-polygon(c(-0.1,0.1,0.1,-0.1),c(0,0,1.1,1.1),col = "gray85",
-        border = "gray85", lwd = 3, lty = "solid")
-polygon(c(-3.5,-0.1,-0.1,-3.5),c(0,0,1.1,1.1),col = "gray98",
-        border = "gray98", lwd = 3, lty = "solid")
-polygon(c(3.5,0.1,0.1,3.5),c(0,0,1.1,1.1),col = "gray98",
-        border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-3.5,3.5,3.5,-3.5),c(0,0,6,6),col = "gray98", border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-0.04,0.04,0.04,-0.04),c(0,0,6,6),col = "gray85", border = "gray85", lwd = 3, lty = "solid")
 polygon(c(fit_x[1:16],fit_x[16:1]),err.accRate.acc[1:32],col = error.color,
         border = "gray98", lwd = 3, lty = "solid")
 polygon(c(fit_x[18:33],fit_x[33:18]),err.accRate.acc[33:64],col = error.color,
@@ -443,6 +438,9 @@ axis(2,seq(0,1,0.2),seq(0,1,0.2), las=2)
 mtext("Accuracy rate", 2, line=2.2)
 mtext("Accuracy instructions", 3, line=1)
 mtext("Stimulus configuration", 1, line=3)
+legend("left",c("95% C.I.","Mean prediction","Observed"), col=c(error.color,pred.color,NA), lwd=c(8,4,NA), bty = "n", bg = "gray98", cex=0.8)
+x.marker <- -3.1
+points(x.marker,0.74, col=data.color, pch=8)
 box(col="black")
 abline(h=0.5,lty=2, col="gray85")
 text(2,0.52,"50% accuracy",col="gray85", cex=0.7)
@@ -450,12 +448,8 @@ text(2,0.52,"50% accuracy",col="gray85", cex=0.7)
 # Plot for the Speed instructions condition
 plot(fit_x,est.accRate.spd, col="white", 
      ann=F, axes=F, ylim=c(0.45,1.1),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
-polygon(c(-0.1,0.1,0.1,-0.1),c(0,0,1.1,1.1),col = "gray85",
-        border = "gray85", lwd = 3, lty = "solid")
-polygon(c(-3.5,-0.1,-0.1,-3.5),c(0,0,1.1,1.1),col = "gray98",
-        border = "gray98", lwd = 3, lty = "solid")
-polygon(c(3.5,0.1,0.1,3.5),c(0,0,1.1,1.1),col = "gray98",
-        border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-3.5,3.5,3.5,-3.5),c(0,0,6,6),col = "gray98", border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-0.04,0.04,0.04,-0.04),c(0,0,6,6),col = "gray85", border = "gray85", lwd = 3, lty = "solid")
 polygon(c(fit_x[1:16],fit_x[16:1]),err.accRate.spd[1:32],col = error.color,
         border = "gray98", lwd = 3, lty = "solid")
 polygon(c(fit_x[18:33],fit_x[33:18]),err.accRate.spd[33:64],col = error.color,
@@ -479,20 +473,16 @@ mtext("Accuracy rate per condition",3,outer=TRUE, f=2, line=-2, cex=1.8)
 
 ```{r, fig.align='center', out.width="100%"}
 par(mfrow = c(1,2), mai=c(0.9,0.6,1,0.3))
-data.color  <- "darkmagenta"
-error.color <- "darkseagreen2"
-pred.color <- "darkseagreen3"
+data.color  <- "royalblue3"
+error.color <- "mistyrose1"
+pred.color <- "mistyrose3"
 point.size <- 0.9
 
 # Plot for the Accuracy instructions condition
 plot(fit_x,est.rtCorMean.acc, col="white", 
      ann=F, axes=F, ylim=c(0.2,1),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
-polygon(c(-0.1,0.1,0.1,-0.1),c(0,0,1.1,1.1),col = "gray85",
-        border = "gray85", lwd = 3, lty = "solid")
-polygon(c(-3.5,-0.1,-0.1,-3.5),c(0,0,1.1,1.1),col = "gray98",
-        border = "gray98", lwd = 3, lty = "solid")
-polygon(c(3.5,0.1,0.1,3.5),c(0,0,1.1,1.1),col = "gray98",
-        border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-3.5,3.5,3.5,-3.5),c(0,0,6,6),col = "gray98", border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-0.04,0.04,0.04,-0.04),c(0,0,6,6),col = "gray85", border = "gray85", lwd = 3, lty = "solid")
 polygon(c(fit_x[1:16],fit_x[16:1]),err.rtCorMean.acc[1:32],col = error.color,
         border = "gray98", lwd = 3, lty = "solid")
 polygon(c(fit_x[18:33],fit_x[33:18]),err.rtCorMean.acc[33:64],col = error.color,
@@ -505,17 +495,16 @@ axis(2,seq(0,1,0.2),seq(0,1,0.2), las=2)
 mtext("Mean correct RT (secs)", 2, line=2.2)
 mtext("Accuracy instructions", 3, line=1)
 mtext("Stimulus configuration", 1, line=3)
+legend("topleft",c("95% C.I.","Mean prediction","Observed"), col=c(error.color,pred.color,NA), lwd=c(8,4,NA), bty = "n", bg = "gray98", cex=0.8)
+x.marker <- -3.1
+points(x.marker,0.875, col=data.color, pch=8)
 box(col="black")
 
 # Plot for the Speed instructions condition
 plot(fit_x,est.rtCorMean.spd, col="white", 
      ann=F, axes=F, ylim=c(0.2,1),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
-polygon(c(-0.1,0.1,0.1,-0.1),c(0,0,1.1,1.1),col = "gray85",
-        border = "gray85", lwd = 3, lty = "solid")
-polygon(c(-3.5,-0.1,-0.1,-3.5),c(0,0,1.1,1.1),col = "gray98",
-        border = "gray98", lwd = 3, lty = "solid")
-polygon(c(3.5,0.1,0.1,3.5),c(0,0,1.1,1.1),col = "gray98",
-        border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-3.5,3.5,3.5,-3.5),c(0,0,6,6),col = "gray98", border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-0.04,0.04,0.04,-0.04),c(0,0,6,6),col = "gray85", border = "gray85", lwd = 3, lty = "solid")
 polygon(c(fit_x[1:16],fit_x[16:1]),err.rtCorMean.spd[1:32],col = error.color,
         border = "gray98", lwd = 3, lty = "solid")
 polygon(c(fit_x[18:33],fit_x[33:18]),err.rtCorMean.spd[33:64],col = error.color,
@@ -537,20 +526,16 @@ mtext("Mean correct RT per condition",3,outer=TRUE, f=2, line=-2, cex=1.8)
 
 ```{r, fig.align='center', out.width="100%"}
 par(mfrow = c(1,2), mai=c(0.9,0.6,1,0.3))
-data.color  <- "darkmagenta"
-error.color <- "darkseagreen2"
-pred.color <- "darkseagreen3"
+data.color  <- "navyblue"
+error.color <- "plum2"
+pred.color <- "plum3"
 point.size <- 0.9
 
 # Plot for the Accuracy instructions condition
 plot(fit_x,est.rtCorVar.acc, col="white", 
      ann=F, axes=F, ylim=c(0,0.4),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
-polygon(c(-0.1,0.1,0.1,-0.1),c(0,0,1.1,1.1),col = "gray85",
-        border = "gray85", lwd = 3, lty = "solid")
-polygon(c(-3.5,-0.1,-0.1,-3.5),c(0,0,1.1,1.1),col = "gray98",
-        border = "gray98", lwd = 3, lty = "solid")
-polygon(c(3.5,0.1,0.1,3.5),c(0,0,1.1,1.1),col = "gray98",
-        border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-3.5,3.5,3.5,-3.5),c(0,0,6,6),col = "gray98", border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-0.04,0.04,0.04,-0.04),c(0,0,6,6),col = "gray85", border = "gray85", lwd = 3, lty = "solid")
 polygon(c(fit_x[1:16],fit_x[16:1]),err.rtCorVar.acc[1:32],col = error.color,
         border = "gray98", lwd = 3, lty = "solid")
 polygon(c(fit_x[18:33],fit_x[33:18]),err.rtCorVar.acc[33:64],col = error.color,
@@ -563,17 +548,16 @@ axis(2,seq(0,1,0.2),seq(0,1,0.2), las=2)
 mtext("Correct-RT variance", 2, line=2.2)
 mtext("Accuracy instructions", 3, line=1)
 mtext("Stimulus configuration", 1, line=3)
+legend("topleft",c("95% C.I.","Mean prediction","Observed"), col=c(error.color,pred.color,NA), lwd=c(8,4,NA), bty = "n", bg = "gray98", cex=0.8)
+x.marker <- -3.1
+points(x.marker,0.338, col=data.color, pch=8)
 box(col="black")
 
 # Plot for the Speed instructions condition
 plot(fit_x,est.rtCorVar.spd, col="white", 
      ann=F, axes=F, ylim=c(0,0.4),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
-polygon(c(-0.1,0.1,0.1,-0.1),c(0,0,1.1,1.1),col = "gray85",
-        border = "gray85", lwd = 3, lty = "solid")
-polygon(c(-3.5,-0.1,-0.1,-3.5),c(0,0,1.1,1.1),col = "gray98",
-        border = "gray98", lwd = 3, lty = "solid")
-polygon(c(3.5,0.1,0.1,3.5),c(0,0,1.1,1.1),col = "gray98",
-        border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-3.5,3.5,3.5,-3.5),c(0,0,6,6),col = "gray98", border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-0.04,0.04,0.04,-0.04),c(0,0,6,6),col = "gray85", border = "gray85", lwd = 3, lty = "solid")
 polygon(c(fit_x[1:16],fit_x[16:1]),err.rtCorVar.spd[1:32],col = error.color,
         border = "gray98", lwd = 3, lty = "solid")
 polygon(c(fit_x[18:33],fit_x[33:18]),err.rtCorVar.spd[33:64],col = error.color,
