@@ -80,7 +80,7 @@ ez_summaries <- function(subset){
   # Return relevant summary statistics
   return(data.frame("nTrials" = nrow(subset),
                     "score" = sum(subset$response),
-                    "meanRT"  = mean(subset$RT[which(subset$response==1)])/1000,
+                    "meanRT"  = mean(subset$RT[which(subset$response==1)]/1000),
                     "varRT"   = var(subset$RT[which(subset$response==1)]/1000),
                   # Index variable: Accuracy (-0.5) vs Speed (0.5) condition
                     "Xi"  = as.integer(cond>33)-0.5,
@@ -153,10 +153,9 @@ model {
             # Here, drift rate is the criterion.
             drift_pred[p] = beta0*phi(beta1 + beta2*abs(Xs[p]) + beta3*Xi[p]*abs(Xs[p])) + beta4 * Xi[p] + drift_mean
             drift[p] ~ dnorm(drift_pred[p], (drift_sdev^-2))
-            bound[p] ~ dnorm(bound_mean + betaweight * Xi[p],
-                            (bound_sdev^-2))T( 0.10, 3.00)
-            nondt[p] ~ dnorm(nondt_mean, (nondt_sdev^-2))
-                                            T( 0.05, )
+            bound_pred[p] = bound_mean + betaweight * Xi[p]
+            bound[p] ~ dnorm(bound_pred[p],(bound_sdev^-2))T( 0.10, 3.00)
+            nondt[p] ~ dnorm(nondt_mean, (nondt_sdev^-2))T( 0.05, )
         
             # Forward equations from EZ DDM
             ey[p]  = exp(-bound[p] * drift[p])
@@ -167,6 +166,16 @@ model {
             MDT[p] = (bound[p] / (2 * drift[p])) * 
                      (1 - ey[p]) / (1 + ey[p])
             MRT[p] = MDT[p] + nondt[p]
+            
+            # Noiseless predictions from forward EZ DDM
+            ey_pred[p]  = exp(-bound_pred[p] * drift_pred[p])
+            Pc_pred[p]  = 1 / (1 + ey_pred[p])
+            PRT_pred[p] = 2 * pow(drift_pred[p], 3) / bound_pred[p] * 
+                     pow(ey_pred[p] + 1, 2) / (2 * -bound_pred[p] * 
+                     drift_pred[p] * ey_pred[p] - ey_pred[p] * ey_pred[p] + 1)
+            MDT_pred[p] = (bound_pred[p] / (2 * drift_pred[p])) * 
+                     (1 - ey_pred[p]) / (1 + ey_pred[p])
+            MRT_pred[p] = MDT_pred[p] + nondt_mean
         
             # Sampling distributions for summary statistics
             correct[p] ~ dbin(Pc[p], nTrials[p])
@@ -206,7 +215,7 @@ for(i in 1:n.chains){
 
 # Specify parameters to keep track of
 parameters <- c('beta3', 'beta4', 'drift', 'drift_pred',
-                "Pc", "MRT", "PRT")
+                "Pc_pred", "MRT_pred", "PRT_pred")
 ```
 
 ### Run JAGS
@@ -236,9 +245,9 @@ beta4 <- samples$BUGSoutput$sims.list$beta4 # Interaction
 drift_pred <- samples$BUGSoutput$sims.list$drift_pred
 
 ##### Summary statistics sampled
-accRate_hat   <- samples$BUGSoutput$sims.list$Pc
-rtCorMean_hat <- samples$BUGSoutput$sims.list$MRT
-rtCorVar_hat  <- 1/samples$BUGSoutput$sims.list$PRT
+accRate_hat   <- samples$BUGSoutput$sims.list$Pc_pred
+rtCorMean_hat <- samples$BUGSoutput$sims.list$MRT_pred
+rtCorVar_hat  <- 1/samples$BUGSoutput$sims.list$PRT_pred
 ```
 
 
