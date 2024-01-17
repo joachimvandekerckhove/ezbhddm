@@ -1,0 +1,569 @@
+---
+title: "Perception example of EZBHDDM"
+author: "Adriana F. Chávez De la Peña and Joachim Vandekerckhove"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#library(rmdformats)
+```
+# Introduction
+
+Data from [Ratcliff and Rouder (1998)](https://journals.sagepub.com/doi/pdf/10.1111/1467-9280.00067), experiment 1, participant N.H.:
+
+> ''...subjects were asked to decide **whether the overall brightness of pixel arrays displayed on a computer monitor was “high” or “low”** (Fig. 3a). The brightness of a display was controlled by the proportion of the pixels that were white. For each trial, the proportion of white pixels was chosen from one of two distributions, a high distribution or a low distribution, each with fixed mean and standard deviation (Fig. 3b). Feedback was given after each trial to tell the subject whether his or her decision had correctly indicated the distribution...''
+>
+
+There are 66 cells in the design with two main factors:
+
+- **Accuracy vs Speed instructions**: Conditions 1-33 had an accuracy instruction, 34-66 a speed instruction. 
+
+- **More black vs More white pixels**: Conditions 1-16 and 34-49 had more black pixels; conditions 18-33 and 51-66 had more white, and conditions 17 and 50 were ambiguous and will not be used here because they can't provide accuracy measures.
+
+```{r, message=FALSE}
+# Load necessary libraries/packages
+library(R2jags)
+```
+
+# Loading and cleaning the data
+
+### Load the data
+
+```{r}
+# Load the data from one participant
+data_raw <- read.csv("./nh.tsv", sep = "")
+colnames(data_raw) <- c("index","cond","response","RT")
+head(data_raw)
+
+# Data set dimensions
+dim(data_raw)
+```
+
+### Clean the data
+
+```{r}
+# Create a copy of the raw data file 
+data <- data_raw
+
+# Get 'accuracy' binary coding based on the condition and response in raw data file
+accuracy <- as.integer(data_raw$cond > 0  & data_raw$cond < 17 & data_raw$response==1|
+                       data_raw$cond > 17 & data_raw$cond < 34 & data_raw$response==2|
+                       data_raw$cond > 33 & data_raw$cond < 50 & data_raw$response==1|
+                       data_raw$cond > 50 & data_raw$cond < 67 & data_raw$response==2)
+
+# Update the 'response' column of the data copied so it reflects accuracy
+data$response <- accuracy
+
+# Remove rows where RT > 3000ms
+data <- data[which(data$RT<=3000),]
+```
+
+# Get summary statistics
+
+### Write custom function `ez_summaries`
+
+```{r}
+# Define a function to compute the summary statistics used by EZ-DDM
+ez_summaries <- function(subset){
+  # Identify condition ID
+  cond <- unique(subset$cond)
+  # Return relevant summary statistics
+  return(data.frame("nTrials" = nrow(subset),
+                    "score" = sum(subset$response),
+                    "meanRT"  = mean(subset$RT[which(subset$response==1)]/1000),
+                    "varRT"   = var(subset$RT[which(subset$response==1)]/1000),
+                  # Index variable: Accuracy (-0.5) vs Speed (0.5) condition
+                    "Xi"  = as.integer(cond>33)-0.5,
+                  # Arbitrary scale of stimulus configuration | 0 is 50/50 black and white 
+                    "Xs"  = ((cond-1) %% 33 - 16)/5))
+}
+```
+
+### Compute summary statistics from data
+
+```{r}
+# Initialize an empty output data frame (df)
+tmp <- matrix(0,nrow = max(data$cond),ncol = 6)
+df <- as.data.frame(tmp)
+colnames(df) <- c("nTrials", "sum_accuracy", "mean_rt_correct",
+                  "variance_rt_correct", "Xi", "Xs")
+
+# Populate the df output using the ez_summaries function
+for(i in 1:max(data$cond)){
+  df[i,] <- ez_summaries(data[which(data$cond==i),])
+}
+
+# Remove the two ambiguous conditions (17 and 50, with 50/50 black and white)
+df <- df[-which(df$Xs==0),]
+head(df,3)
+```
+
+# The model 
+
+The model incorporates an effect ($\beta$) of instruction (i.e., $x_i$, `Xi`) on the *bound parameter ($\alpha$)*. 
+
+\begin{align*}
+\alpha &\sim \mbox{Normal}(\mu_\alpha+\beta X_i,\sigma_\alpha)
+\end{align*}
+
+We also include a nonlinear regression on the drift rate $\delta$ using instruction (i.e., $x_i$, `Xi`) and stimulus configuration (i.e., $x_s$, `Xs`) as predictors. For the later, we used the absolute value (i.e., $|x_s|$, `abs(Xs)`) to represent the task difficulty getting easier as the black/white balance departs from $50\%$.
+
+
+\begin{align*}
+Y &= \Phi(\beta_1+\beta_2 |X_s|+\beta_3 X_i |X_s|)\\
+\delta_{\mathrm{pred}} &= \mu_\delta+\beta_0 Y+\beta_4 X_i\\
+\delta &\sim \mbox{Normal}(\delta_\mathrm{pred},\sigma_\delta)
+\end{align*}
+
+In the present example, we focus on the regression parameters capturing the effects of instruction ($\beta_3$, `Beta3`, and $\beta_4$, `Beta4`).
+
+
+### Write the model in JAGS
+
+EZ JAGS code for the model discussed above:
+
+```{r}
+model <- write("
+model {
+        ##### Priors for hierarchical DDM parameters
+        betaweight ~ dnorm(0.00, 1.00)
+        beta0 ~ dnorm(0.00, 1.00)
+        beta1 ~ dnorm(0.00, 1.00)
+        beta2 ~ dnorm(0.00, 1.00)
+        beta3 ~ dnorm(0.00, 1.00)
+        beta4 ~ dnorm(0.00, 1.00)
+        bound_mean ~ dnorm(1.50, (0.20^-2))T( 0.10, 3.00)
+        drift_mean ~ dnorm(0.50, (0.50^-2))
+        nondt_mean ~ dnorm(0.30, (0.06^-2))T( 0, )
+        bound_sdev ~ dunif(0.01, 1.00)
+        drift_sdev ~ dunif(0.01, 3.00)
+        nondt_sdev ~ dunif(0.01, 0.50)
+        
+        # Hierarchical distributions of individual DDM parameters.        
+        for (p in 1:length(meanRT)) {
+            # Here, drift rate is the criterion.
+            drift_pred[p] = beta0*phi(beta1 + beta2*abs(Xs[p]) 
+                            + beta3*Xi[p]*abs(Xs[p])) + beta4 * Xi[p] + drift_mean
+            drift[p] ~ dnorm(drift_pred[p], (drift_sdev^-2))
+            bound_pred[p] = bound_mean + betaweight * Xi[p]
+            bound[p] ~ dnorm(bound_pred[p],(bound_sdev^-2))T( 0.10, 3.00)
+            nondt[p] ~ dnorm(nondt_mean, (nondt_sdev^-2))T( 0.05, )
+        
+            # Forward equations from EZ DDM
+            ey[p]  = exp(-bound[p] * drift[p])
+            Pc[p]  = 1 / (1 + ey[p])
+            PRT[p] = 2 * pow(drift[p], 3) / bound[p] * 
+                     pow(ey[p] + 1, 2) / (2 * -bound[p] * 
+                     drift[p] * ey[p] - ey[p] * ey[p] + 1)
+            MDT[p] = (bound[p] / (2 * drift[p])) * (1 - ey[p]) / (1 + ey[p])
+            MRT[p] = MDT[p] + nondt[p]
+            
+            # Noiseless predictions from forward EZ DDM
+            ey_pred[p]  = exp(-bound_pred[p] * drift_pred[p])
+            Pc_pred[p]  = 1 / (1 + ey_pred[p])
+            PRT_pred[p] = 2 * pow(drift_pred[p], 3) / bound_pred[p] * 
+                     pow(ey_pred[p] + 1, 2) / (2 * -bound_pred[p] * 
+                     drift_pred[p] * ey_pred[p] - ey_pred[p] * ey_pred[p] + 1)
+            MDT_pred[p] = (bound_pred[p] / (2 * drift_pred[p])) * 
+                     (1 - ey_pred[p]) / (1 + ey_pred[p])
+            MRT_pred[p] = MDT_pred[p] + nondt_mean
+        
+            # Sampling distributions for summary statistics
+            correct[p] ~ dbin(Pc[p], nTrials[p])
+            varRT[p]   ~ dnorm(1/PRT[p], 0.5*(correct[p]-1) 
+                                         * PRT[p] * PRT[p])
+            meanRT[p]  ~ dnorm(MRT[p], PRT[p] * correct[p])
+      }
+}", "./model_perception.bug")
+```
+
+
+\clearpage
+
+# JAGS
+
+
+### Specify JAGS setup
+
+```{r}
+# General setup
+n.chains  <- 4
+n.iter    <- 5000
+n.burnin  <- 250
+n.thin    <- 1
+
+# Pass data to JAGS
+data_toJAGS <- list("nTrials"  =  df$nTrials,
+                    "meanRT"   =  df$mean_rt_correct,
+                    "varRT"    =  df$variance_rt_correct,
+                    "correct"  =  df$sum_accuracy,
+                    "Xi"   =  df$Xi,
+                    "Xs"   =  df$Xs)
+
+# Prepare initial values
+myinits <- rep(list(list()), n.chains)
+for(i in 1:n.chains){
+    myinits[[i]] <- list(drift = rnorm(length(data_toJAGS$nTrials),0,0.1))
+}
+
+# Specify parameters to keep track of
+parameters <- c('beta3', 'beta4', 'drift', 'drift_pred',
+                "Pc_pred", "MRT_pred", "PRT_pred")
+```
+
+### Run JAGS
+
+```{r}
+samples <- jags(data=data_toJAGS,
+                parameters.to.save=parameters,
+                model="./model_perception.bug",
+                n.chains=n.chains,
+                n.iter=n.iter,
+                n.burnin=n.burnin,
+                n.thin=n.thin,
+                DIC=T,
+                inits=myinits)
+```
+
+### Extract samples
+
+```{r}
+##### Drift rate parameters
+# Recovered drift rates
+drift <- samples$BUGSoutput$sims.list$drift
+# Effects of instruction
+beta3 <- as.vector(samples$BUGSoutput$sims.list$beta3) # Main
+beta4 <- samples$BUGSoutput$sims.list$beta4 # Interaction
+# Fitted values / Predicted drift rates
+drift_pred <- samples$BUGSoutput$sims.list$drift_pred
+
+##### Summary statistics sampled
+accRate_hat   <- samples$BUGSoutput$sims.list$Pc_pred
+rtCorMean_hat <- samples$BUGSoutput$sims.list$MRT_pred
+rtCorVar_hat  <- 1/samples$BUGSoutput$sims.list$PRT_pred
+```
+
+\clearpage
+
+# Results
+
+```{r, echo=FALSE}
+# Identify conditions to plot on x axis
+x_values <- unique(df$Xs)
+# Insert a 'jump' in between these values
+fit_x <- c(x_values[1:16],NA,x_values[17:32])
+```
+
+```{r, echo=FALSE}
+#### Get mean posterior estimates and percentiles for plotting
+# Drift recovered
+means <- apply(drift, 2, mean)
+percentiles <- apply(drift,2, quantile, probs=c(0.025,0.975))
+lower_percentiles <- percentiles[1,]  #  2.5%
+upper_percentiles <- percentiles[2,]  # 97.5%
+# Drift predictions (i.e., fitted values)
+preds <- apply(drift_pred,2,mean)
+
+### Concatenate values by instruction and add a "jump" between pixel condition
+# Drift rates recovered
+means_acc <- c(means[1:16],NA,means[17:32])
+means_spd <- c(means[33:48],NA,means[49:64])
+# Mean predicted drift rates
+fit_line_acc <- c(preds[1:16],NA,preds[17:32])
+fit_line_spd <- c(preds[33:48],NA,preds[49:64])
+# Lower and upper boundaries of the error bars
+errors_acc <- cbind(c(lower_percentiles[1:16],NA, lower_percentiles[17:32]),
+                    c(upper_percentiles[1:16],NA, upper_percentiles[17:32]))
+errors_spd <- cbind(c(lower_percentiles[33:48],NA, lower_percentiles[49:64]),
+                    c(upper_percentiles[33:48],NA, upper_percentiles[49:64]))
+```
+
+```{r, fig.align='center', out.width="100%", echo=FALSE}
+par(mfrow = c(1,2), mai=c(0.9,0.55,1,0.1))
+line.color  <- "darkorange"
+error.color <- "lightblue3"
+point.size <- 1.2
+
+######################
+# Accuracy condition
+######################
+plot(fit_x,fit_line_acc, type="l", lwd=4, col=line.color, ann=F, axes=F,
+     ylab="Drift rate", ylim=c(0,6),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
+# Gray background
+polygon(c(-3.5,3.5,3.5,-3.5),c(0,0,6,6),col = "gray98", border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-0.04,0.04,0.04,-0.04),c(0,0,6,6),col = "gray85", border = "gray85", lwd = 3, lty = "solid")
+lines(fit_x,fit_line_acc,lwd=4,col=line.color)
+arrows(fit_x,errors_acc[,1], fit_x, errors_acc[,2], length=0.05, angle=90, code=3, col=error.color)
+points(fit_x, means_acc, col=error.color, pch=16, cex=point.size)
+axis(1,c(-2,0,2),c("More black pixels","50/50","More white pixels"), line = -0.5, col.ticks = "white", col="white", cex=0.7)
+axis(1,c(-4,-2,0,2,4),c("","","","",""), line=0)
+axis(2,0:6,0:6, las=2)
+mtext("Drift rate", 2, line=1.6)
+mtext("Accuracy instruction", 3, line=0.5)
+mtext("Stimulus configuration", 1, line=2.1)
+legend("topleft",c("Predicted drift rates","Mean drifts recovered","Error bars"), col=line.color, lwd=c(4,NA,NA), bty = "n", bg = "gray98", cex=0.5)
+x.marker <- -3.05
+points(x.marker,5.51, col=error.color, pch=16)
+arrows(x.marker,5.21, x.marker, 5.35, length=0.05, angle=90, code=3, col=error.color)
+box(col="black")
+
+# Plot for the Speed instruction condition
+plot(fit_x,fit_line_spd, type="l", lwd=4, col=line.color, ann=F, axes=F,
+     ylab="Drift rate", ylim=c(0,6),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
+polygon(c(-3.5,3.5,3.5,-3.5),c(0,0,6,6),col = "gray98", border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-0.04,0.04,0.04,-0.04),c(0,0,6,6),col = "gray85", border = "gray85", lwd = 3, lty = "solid")
+lines(fit_x,fit_line_spd,lwd=4,col=line.color)
+arrows(fit_x,errors_spd[,1], fit_x, errors_spd[,2], length=0.05, angle=90, code=3, col=error.color)
+points(fit_x, means_spd, col=error.color, pch=16, cex=point.size)
+axis(1,c(-2,0,2),c("More black pixels","50/50","More white pixels"), line = -0.5, col.ticks = "white", col="white")
+axis(1,c(-4,-2,0,2,4),c("","","","",""), line=0)
+axis(2,0:6,0:6, las=2)
+mtext("Drift rate", 2, line=1.6)
+mtext("Speed instruction", 3, line=0.5)
+mtext("Stimulus configuration", 1, line=2.1)
+box(col="black")
+
+mtext("Predicted and recovered drift rate per condition",3,outer=TRUE, f=2, line=-2.75, cex=1.2)
+```
+
+```{r, fig.align='center', out.width="80%", echo=FALSE}
+hist(beta3, freq = FALSE, breaks = 50, col="lightblue3", border = "lightblue3", ann=F, axes = T)
+lines(density(beta3), lwd=4, col=line.color)
+box(col="black")
+mtext("Instruction effect on drift rate slope", cex=1.2, f=2, side=3, line=0.8)
+legend("topleft",c("Histogram","KDE"),col=c("lightblue3",line.color),lwd=4, cex=1.1, bty = "n")
+mtext("Density",side=2,line=2.15)
+mtext("Beta4",side=1,line=2)
+```
+
+
+```{r, fig.align='center', out.width="80%", echo=FALSE}
+hist(beta4, freq = FALSE, breaks = 50, col="lightblue3", border = "lightblue3", ann=F, axes = F,xaxs = "i", yaxs = "i", xlim=c(0,1.6), ylim = c(0,2.2))
+lines(density(beta4), lwd=4, col=line.color)
+box(col="black")
+mtext("Instruction main effect on drift rate", cex=1.2, f=2, side=3, line=0.8)
+legend("topleft",c("Histogram","KDE"),col=c("lightblue3",line.color),lwd=4, cex=1.1, bty = "n")
+mtext("Density",side=2,line=2.15)
+mtext("Beta4",side=1,line=2)
+axis(1,seq(0,1.6,0.4),seq(0,1.6,0.4))
+axis(2,seq(0,2,0.5),seq(0,2,0.5),las=2)
+```
+
+```{r, echo=FALSE}
+### Prepare JAGS output
+
+## Get mean posteriors and key percentiles
+# Accuracy rate
+est.accRate <- apply(accRate_hat, 2, mean)
+perc.accRate <- apply(accRate_hat,2, quantile, probs=c(0.025,0.975))
+# Mean RT-correct
+est.rtCorMean <- apply(rtCorMean_hat, 2, mean)
+perc.rtCorMean <- apply(rtCorMean_hat,2, quantile, probs=c(0.025,0.975))
+# RT-correct Variance
+est.rtCorVar <- apply(rtCorVar_hat, 2, mean)
+perc.rtCorVar <- apply(rtCorVar_hat,2, quantile, probs=c(0.025,0.975))
+
+## Concatenate per instruction condition, with a "jump" between pixel condition
+# Accuracy rate
+est.accRate.acc <- c(est.accRate[1:16],NA,est.accRate[17:32])
+est.accRate.spd <- c(est.accRate[33:48],NA,est.accRate[49:64])
+# Mean RT-correct
+est.rtCorMean.acc <- c(est.rtCorMean[1:16],NA,est.rtCorMean[17:32])
+est.rtCorMean.spd <- c(est.rtCorMean[33:48],NA,est.rtCorMean[49:64])
+# RT-correct Variance
+est.rtCorVar.acc <- c(est.rtCorVar[1:16],NA,est.rtCorVar[17:32])
+est.rtCorVar.spd <- c(est.rtCorVar[33:48],NA,est.rtCorVar[49:64])
+
+## Arrange lower and upper percentiles such that we can use polygon() to draw them
+# Accuracy rate
+err.accRate.acc  <- c(perc.accRate[1,1:16],  perc.accRate[2,16:1],
+                      perc.accRate[1,17:32], perc.accRate[2,32:17])
+err.accRate.spd  <- c(perc.accRate[1,33:48], perc.accRate[2,48:33],
+                      perc.accRate[1,49:64], perc.accRate[2,64:49])
+# Mean RT-correct
+err.rtCorMean.acc  <- c(perc.rtCorMean[1,1:16],  perc.rtCorMean[2,16:1],
+                        perc.rtCorMean[1,17:32], perc.rtCorMean[2,32:17])
+err.rtCorMean.spd  <- c(perc.rtCorMean[1,33:48], perc.rtCorMean[2,48:33], 
+                        perc.rtCorMean[1,49:64], perc.rtCorMean[2,64:49])
+# RT-correct Variance
+err.rtCorVar.acc  <- c(perc.rtCorVar[1,1:16],  perc.rtCorVar[2,16:1],
+                       perc.rtCorVar[1,17:32], perc.rtCorVar[2,32:17])
+err.rtCorVar.spd  <- c(perc.rtCorVar[1,33:48], perc.rtCorVar[2,48:33],
+                       perc.rtCorVar[1,49:64], perc.rtCorVar[2,64:49])
+
+#### Prepare data
+
+# Compute accuracy rate per condition from the summary data
+df$acc_rate <- df$sum_accuracy/df$nTrials
+
+# Concatenate accuracy rates with a 'jump', across speed/accuracy conditions
+acc.accRate <- c(df$acc_rate[1:16],NA,df$acc_rate[17:32])
+spd.accRate <- c(df$acc_rate[33:48],NA,df$acc_rate[49:64])
+# Concatenate mean RT-correct with a 'jump', across speed/accuracy conditions
+acc.meanRTcor <- c(df$mean_rt_correct[1:16],NA,df$mean_rt_correct[17:32])
+spd.meanRTcor <- c(df$mean_rt_correct[33:48],NA,df$mean_rt_correct[49:64])
+# Concatenate RT-correct variance with a 'jump', across speed/accuracy conditions
+acc.varRTcor <- c(df$variance_rt_correct[1:16],NA,df$variance_rt_correct[17:32])
+spd.varRTcor <- c(df$variance_rt_correct[33:48],NA,df$variance_rt_correct[49:64])
+```
+
+
+```{r, fig.align='center', out.width="100%", echo=FALSE}
+par(mfrow = c(1,2), mai=c(0.9,0.6,1,0.1))
+data.color  <- "darkmagenta"
+error.color <- "darkseagreen2"
+pred.color <- "darkseagreen3"
+point.size <- 0.9
+
+# Plot for the Accuracy instructions condition
+plot(fit_x,est.accRate.acc, col="white", 
+     ann=F, axes=F, ylim=c(0.45,1.1),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
+polygon(c(-3.5,3.5,3.5,-3.5),c(0,0,6,6),col = "gray98", border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-0.04,0.04,0.04,-0.04),c(0,0,6,6),col = "gray85", border = "gray85", lwd = 3, lty = "solid")
+polygon(c(fit_x[1:16],fit_x[16:1]),err.accRate.acc[1:32],col = error.color,
+        border = "gray98", lwd = 3, lty = "solid")
+polygon(c(fit_x[18:33],fit_x[33:18]),err.accRate.acc[33:64],col = error.color,
+        border = "gray98", lwd = 3, lty = "solid")
+lines(fit_x,est.accRate.acc,col=pred.color, lwd=3)
+points(fit_x,acc.accRate,pch=8,col=data.color, cex=0.7)
+axis(1,c(-2,0,2),c("More black pixels","50/50","More white pixels"), line = -0.5, col.ticks = "white", col="white", cex=0.7)
+axis(1,c(-4,-2,0,2,4),c("","","","",""), line=0)
+axis(2,seq(0,1,0.2),seq(0,1,0.2), las=2)
+mtext("Accuracy rate", 2, line=2.2)
+mtext("Accuracy instructions", 3, line=0.5)
+mtext("Stimulus configuration", 1, line=2.1)
+legend("left",c("95% C.I.","Mean prediction","Observed"), col=c(error.color,pred.color,NA), lwd=c(8,4,NA), bty = "n", bg = "gray98", cex=0.5)
+x.marker <- -3.1
+points(x.marker,0.745, col=data.color, pch=8)
+box(col="black")
+abline(h=0.5,lty=2, col="gray85")
+text(2,0.52,"50% accuracy",col="gray85", cex=0.7)
+
+# Plot for the Speed instructions condition
+plot(fit_x,est.accRate.spd, col="white", 
+     ann=F, axes=F, ylim=c(0.45,1.1),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
+polygon(c(-3.5,3.5,3.5,-3.5),c(0,0,6,6),col = "gray98", border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-0.04,0.04,0.04,-0.04),c(0,0,6,6),col = "gray85", border = "gray85", lwd = 3, lty = "solid")
+polygon(c(fit_x[1:16],fit_x[16:1]),err.accRate.spd[1:32],col = error.color,
+        border = "gray98", lwd = 3, lty = "solid")
+polygon(c(fit_x[18:33],fit_x[33:18]),err.accRate.spd[33:64],col = error.color,
+        border = "gray98", lwd = 3, lty = "solid")
+lines(fit_x,est.accRate.spd,col=pred.color, lwd=3)
+points(fit_x,spd.accRate,pch=8,col=data.color, cex=0.7)
+axis(1,c(-2,0,2),c("More black pixels","50/50","More white pixels"), line = -0.5, col.ticks = "white", col="white", cex=0.7)
+axis(1,c(-4,-2,0,2,4),c("","","","",""), line=0)
+axis(2,seq(0,1,0.2),seq(0,1,0.2), las=2)
+mtext("Accuracy rate", 2, line=2.2)
+mtext("Speed instructions", 3, line=0.5)
+mtext("Stimulus configuration", 1, line=2.1)
+box(col="black")
+abline(h=0.5,lty=2, col="gray85")
+text(2,0.52,"50% accuracy",col="gray85", cex=0.7)
+
+mtext("Accuracy rate per condition",3,outer=TRUE, f=2, line=-2.75, cex=1.2)
+```
+
+
+```{r, fig.align='center', out.width="95%", echo=FALSE}
+par(mfrow = c(1,2), mai=c(0.9,0.6,1,0.1))
+data.color  <- "royalblue3"
+error.color <- "mistyrose1"
+pred.color <- "mistyrose3"
+point.size <- 0.9
+
+# Plot for the Accuracy instructions condition
+plot(fit_x,est.rtCorMean.acc, col="white", 
+     ann=F, axes=F, ylim=c(0.2,1),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
+polygon(c(-3.5,3.5,3.5,-3.5),c(0,0,6,6),col = "gray98", border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-0.04,0.04,0.04,-0.04),c(0,0,6,6),col = "gray85", border = "gray85", lwd = 3, lty = "solid")
+polygon(c(fit_x[1:16],fit_x[16:1]),err.rtCorMean.acc[1:32],col = error.color,
+        border = "gray98", lwd = 3, lty = "solid")
+polygon(c(fit_x[18:33],fit_x[33:18]),err.rtCorMean.acc[33:64],col = error.color,
+        border = "gray98", lwd = 3, lty = "solid")
+lines(fit_x,est.rtCorMean.acc,col=pred.color, lwd=3)
+points(fit_x,acc.meanRTcor,pch=8,col=data.color, cex=0.7)
+axis(1,c(-2,0,2),c("More black pixels","50/50","More white pixels"), line = -0.5, col.ticks = "white", col="white", cex=0.7)
+axis(1,c(-4,-2,0,2,4),c("","","","",""), line=0)
+axis(2,seq(0,1,0.2),seq(0,1,0.2), las=2)
+mtext("Mean correct RT (secs)", 2, line=2.2, cex=0.9)
+mtext("Accuracy instructions", 3, line=0.5)
+mtext("Stimulus configuration", 1, line=2.1)
+legend("topleft",c("95% C.I.","Mean prediction","Observed"), col=c(error.color,pred.color,NA), lwd=c(8,4,NA), bty = "n", bg = "gray98", cex=0.5)
+x.marker <- -3.1
+points(x.marker,0.905, col=data.color, pch=8, cex=0.8)
+box(col="black")
+
+# Plot for the Speed instructions condition
+plot(fit_x,est.rtCorMean.spd, col="white", 
+     ann=F, axes=F, ylim=c(0.2,1),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
+polygon(c(-3.5,3.5,3.5,-3.5),c(0,0,6,6),col = "gray98", border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-0.04,0.04,0.04,-0.04),c(0,0,6,6),col = "gray85", border = "gray85", lwd = 3, lty = "solid")
+polygon(c(fit_x[1:16],fit_x[16:1]),err.rtCorMean.spd[1:32],col = error.color,
+        border = "gray98", lwd = 3, lty = "solid")
+polygon(c(fit_x[18:33],fit_x[33:18]),err.rtCorMean.spd[33:64],col = error.color,
+        border = "gray98", lwd = 3, lty = "solid")
+lines(fit_x,est.rtCorMean.spd,col=pred.color, lwd=5)
+points(fit_x,spd.meanRTcor,pch=8,col=data.color, cex=0.5)
+axis(1,c(-2,0,2),c("More black pixels","50/50","More white pixels"), line = -0.5, col.ticks = "white", col="white",cex=0.7)
+axis(1,c(-4,-2,0,2,4),c("","","","",""), line=0)
+axis(2,seq(0,1,0.2),seq(0,1,0.2), las=2)
+mtext("Mean correct RT (secs)", 2, line=2.2, cex=0.9)
+mtext("Speed instructions", 3, line=0.5)
+mtext("Stimulus configuration", 1, line=2.1)
+box(col="black")
+
+mtext("Mean correct RT per condition",3,outer=TRUE, f=2, line=-2.7, cex=1.2)
+```
+
+```{r, fig.align='center', out.width="95%", echo=FALSE}
+par(mfrow = c(1,2), mai=c(0.9,0.6,1,0.1))
+data.color  <- "navyblue"
+error.color <- "plum2"
+pred.color <- "plum3"
+point.size <- 0.9
+
+# Plot for the Accuracy instructions condition
+plot(fit_x,est.rtCorVar.acc, col="white", 
+     ann=F, axes=F, ylim=c(0,0.4),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
+polygon(c(-3.5,3.5,3.5,-3.5),c(0,0,6,6),col = "gray98", border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-0.04,0.04,0.04,-0.04),c(0,0,6,6),col = "gray85", border = "gray85", lwd = 3, lty = "solid")
+polygon(c(fit_x[1:16],fit_x[16:1]),err.rtCorVar.acc[1:32],col = error.color,
+        border = "gray98", lwd = 3, lty = "solid")
+polygon(c(fit_x[18:33],fit_x[33:18]),err.rtCorVar.acc[33:64],col = error.color,
+        border = "gray98", lwd = 3, lty = "solid")
+lines(fit_x,est.rtCorVar.acc,col=pred.color, lwd=3)
+points(fit_x,acc.varRTcor,pch=8,col=data.color, cex=0.7)
+axis(1,c(-2,0,2),c("More black pixels","50/50","More white pixels"), line = -0.5, col.ticks = "white", col="white", cex=0.7)
+axis(1,c(-4,-2,0,2,4),c("","","","",""), line=0)
+axis(2,seq(0,1,0.2),seq(0,1,0.2), las=2)
+mtext("Correct-RT variance", 2, line=2.2, cex=0.9)
+mtext("Accuracy instructions", 3, line=0.5)
+mtext("Stimulus configuration", 1, line=2.1)
+legend("topleft",c("95% C.I.","Mean prediction","Observed"), col=c(error.color,pred.color,NA), lwd=c(8,4,NA), bty = "n", bg = "gray98", cex=0.5)
+x.marker <- -3.1
+points(x.marker,0.352, col=data.color, pch=8, cex=0.8)
+box(col="black")
+
+# Plot for the Speed instructions condition
+plot(fit_x,est.rtCorVar.spd, col="white", 
+     ann=F, axes=F, ylim=c(0,0.4),xaxs = "i", yaxs = "i", xlim=c(-3.5,3.5))
+polygon(c(-3.5,3.5,3.5,-3.5),c(0,0,6,6),col = "gray98", border = "gray98", lwd = 3, lty = "solid")
+polygon(c(-0.04,0.04,0.04,-0.04),c(0,0,6,6),col = "gray85", border = "gray85", lwd = 3, lty = "solid")
+polygon(c(fit_x[1:16],fit_x[16:1]),err.rtCorVar.spd[1:32],col = error.color,
+        border = "gray98", lwd = 3, lty = "solid")
+polygon(c(fit_x[18:33],fit_x[33:18]),err.rtCorVar.spd[33:64],col = error.color,
+        border = "gray98", lwd = 3, lty = "solid")
+lines(fit_x,est.rtCorVar.spd,col=pred.color, lwd=3)
+points(fit_x,spd.varRTcor,pch=8,col=data.color, cex=0.7)
+axis(1,c(-2,0,2),c("More black pixels","50/50","More white pixels"), line = -0.5, col.ticks = "white", col="white", cex=0.7)
+axis(1,c(-4,-2,0,2,4),c("","","","",""), line=0)
+axis(2,seq(0,1,0.2),seq(0,1,0.2), las=2)
+mtext("Correct-RT variance", 2, line=2.2, cex=0.9)
+mtext("Speed instructions", 3, line=0.5)
+mtext("Stimulus configuration", 1, line=2.1)
+box(col="black")
+
+mtext("Correct-RT variance per condition",3,outer=TRUE, f=2, line=-2.7, cex=1.2)
+```
