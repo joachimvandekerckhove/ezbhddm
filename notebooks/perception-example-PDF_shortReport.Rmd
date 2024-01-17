@@ -105,15 +105,15 @@ head(df,3)
 The model incorporates an effect ($\beta$) of instruction (i.e., $x_i$, `Xi`) on the *bound parameter ($\alpha$)*. 
 
 \begin{align*}
-\alpha &\sim \mbox{Normal}(\mu_\alpha+\beta X_i,\sigma_\alpha)
+\alpha &\sim \mbox{Normal}(\mu_\alpha+\beta x_i,\sigma_\alpha)
 \end{align*}
 
-We also include a nonlinear regression on the drift rate $\delta$ using instruction (i.e., $x_i$, `Xi`) and stimulus configuration (i.e., $x_s$, `Xs`) as predictors. For the later, we used the absolute value (i.e., $|x_s|$, `abs(Xs)`) to represent the task difficulty getting easier as the black/white balance departs from $50\%$.
+We also include a nonlinear regression on the drift rate $\delta$ using instruction (i.e., $x_i$, `Xi`) and stimulus configuration (i.e., $x_s$, `Xs`) as predictors. For the latter, we used the absolute value (i.e., $|x_s|$, `abs(Xs)`) to represent the task difficulty getting easier as the black/white balance departs from $50\%$.
 
 
 \begin{align*}
-Y &= \Phi(\beta_1+\beta_2 |X_s|+\beta_3 X_i |X_s|)\\
-\delta_{\mathrm{pred}} &= \mu_\delta+\beta_0 Y+\beta_4 X_i\\
+Y &= \Phi(\beta_1+\beta_2 |x_s|+\beta_3 x_i |x_s|)\\
+\delta_{\mathrm{pred}} &= \mu_\delta+\beta_0 Y+\beta_4 x_i\\
 \delta &\sim \mbox{Normal}(\delta_\mathrm{pred},\sigma_\delta)
 \end{align*}
 
