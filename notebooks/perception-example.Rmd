@@ -260,12 +260,7 @@ beta4 <- samples$BUGSoutput$sims.list$beta4 # Interaction
 # Fitted values / Predicted drift rates
 drift_pred <- samples$BUGSoutput$sims.list$drift_pred
 
-##### Summary statistics predicted from the predicted drift and boundary
-accRate_hat   <- samples$BUGSoutput$sims.list$Pc_pred
-rtMean_hat <- samples$BUGSoutput$sims.list$MRT_pred
-rtVar_hat  <- 1/samples$BUGSoutput$sims.list$PRT_pred
-
-##### Summary statistics computed from the recovered drift and boundary
+##### Summary statistics estimated from the recovered drift and boundary
 Pc   <- samples$BUGSoutput$sims.list$Pc
 PRT  <- samples$BUGSoutput$sims.list$PRT
 MRT  <- samples$BUGSoutput$sims.list$MRT
@@ -392,46 +387,48 @@ mtext("Predicted and recovered drift rate per condition",3,outer=TRUE, f=2, line
 ```
 
 
-## Summary statistics derived from the predicted drift rate and boundary
+## Posterior predictive checks
 
 ```{r}
-## Get mean posteriors
-est.accRate   <- apply(accRate_hat, 2, mean)
-est.rtMean <- apply(rtMean_hat, 2, mean)
-est.rtVar  <- apply(rtVar_hat, 2, mean)
-## Get percentiles
-perc.accRate   <- apply(accRate_hat,2, quantile, probs=c(0.025,0.975))
-perc.rtMean <- apply(rtMean_hat,2, quantile, probs=c(0.025,0.975))
-perc.rtVar  <- apply(rtVar_hat,2, quantile, probs=c(0.025,0.975))
+## Get mean posteriors and key percentiles
+# Accuracy rate
+pp.accRate <- apply(pp_accRate, 2, mean)
+pp.perc.accRate <- apply(pp_accRate,2, quantile, probs=c(0.025,0.975))
+# Mean RT-correct
+pp.rtMean <- apply(pp_meanRT, 2, mean)
+pp.perc.rtMean <- apply(pp_meanRT,2, quantile, probs=c(0.025,0.975))
+# RT-correct Variance
+pp.rtVar <- apply(pp_varRT, 2, mean)
+pp.perc.rtVar <- apply(pp_varRT,2, quantile, probs=c(0.025,0.975))
 ```
 
 ```{r, echo=FALSE}
-## Concatenate per instruction condition, with a "jump" between pixel condition
 accRate <- makeLines(df$acc_rate)
 meanRT  <- makeLines(df$mean_rt)
 varRT   <- makeLines(df$variance_rt)
 
-est.accRate.Full   <- makeLines(est.accRate)
-est.rtMean.Full <- makeLines(est.rtMean)
-est.rtVar.Full  <- makeLines(est.rtVar)
+## Concatenate per instruction condition, with a "jump" between pixel condition
+est.accRate.Full   <- makeLines(pp.accRate)
+est.rtMean.Full <- makeLines(pp.rtMean)
+est.rtVar.Full  <- makeLines(pp.rtVar)
 
 
 ## Arrange lower and upper percentiles such that we can use polygon() to draw them
 # Accuracy rate
-err.accRate.acc  <- c(perc.accRate[1,1:16],  perc.accRate[2,16:1],
-                      perc.accRate[1,17:32], perc.accRate[2,32:17])
-err.accRate.spd  <- c(perc.accRate[1,33:48], perc.accRate[2,48:33],
-                      perc.accRate[1,49:64], perc.accRate[2,64:49])
+err.accRate.acc  <- c(pp.perc.accRate[1,1:16],  pp.perc.accRate[2,16:1],
+                      pp.perc.accRate[1,17:32], pp.perc.accRate[2,32:17])
+err.accRate.spd  <- c(pp.perc.accRate[1,33:48], pp.perc.accRate[2,48:33],
+                      pp.perc.accRate[1,49:64], pp.perc.accRate[2,64:49])
 # Mean RT-correct
-err.rtMean.acc  <- c(perc.rtMean[1,1:16],  perc.rtMean[2,16:1],
-                        perc.rtMean[1,17:32], perc.rtMean[2,32:17])
-err.rtMean.spd  <- c(perc.rtMean[1,33:48], perc.rtMean[2,48:33], 
-                        perc.rtMean[1,49:64], perc.rtMean[2,64:49])
+err.rtMean.acc  <- c(pp.perc.rtMean[1,1:16],  pp.perc.rtMean[2,16:1],
+                        pp.perc.rtMean[1,17:32], pp.perc.rtMean[2,32:17])
+err.rtMean.spd  <- c(pp.perc.rtMean[1,33:48], pp.perc.rtMean[2,48:33], 
+                        pp.perc.rtMean[1,49:64], pp.perc.rtMean[2,64:49])
 # RT-correct Variance
-err.rtVar.acc  <- c(perc.rtVar[1,1:16],  perc.rtVar[2,16:1],
-                       perc.rtVar[1,17:32], perc.rtVar[2,32:17])
-err.rtVar.spd  <- c(perc.rtVar[1,33:48], perc.rtVar[2,48:33],
-                       perc.rtVar[1,49:64], perc.rtVar[2,64:49])
+err.rtVar.acc  <- c(pp.perc.rtVar[1,1:16],  pp.perc.rtVar[2,16:1],
+                       pp.perc.rtVar[1,17:32], pp.perc.rtVar[2,32:17])
+err.rtVar.spd  <- c(pp.perc.rtVar[1,33:48], pp.perc.rtVar[2,48:33],
+                       pp.perc.rtVar[1,49:64], pp.perc.rtVar[2,64:49])
 ```
 
 ```{r, fig.align='center', out.width="100%", echo=FALSE}
@@ -535,73 +532,6 @@ predVarRT_plot <- function(varRT, est.rtVar.Full, err.rtVar.acc, err.rtVar.spd){
     mtext("Stimulus configuration", 1, line=3)
     mtext("RT Variance per condition",3,outer=TRUE, f=2, line=-1.5, cex=1.8)
 }
-
-predVarRT_plot(varRT, est.rtVar.Full, err.rtVar.acc, err.rtVar.spd)
-```
-
-## Posterior predictive checks
-
-```{r}
-## Get mean posteriors and key percentiles
-# Accuracy rate
-pp.accRate <- apply(pp_accRate, 2, mean)
-pp.perc.accRate <- apply(pp_accRate,2, quantile, probs=c(0.025,0.975))
-# Mean RT-correct
-pp.rtMean <- apply(pp_meanRT, 2, mean)
-pp.perc.rtMean <- apply(pp_meanRT,2, quantile, probs=c(0.025,0.975))
-# RT-correct Variance
-pp.rtVar <- apply(pp_varRT, 2, mean)
-pp.perc.rtVar <- apply(pp_varRT,2, quantile, probs=c(0.025,0.975))
-```
-
-```{r, echo=FALSE}
-## Concatenate per instruction condition, with a "jump" between pixel condition
-est.accRate.Full   <- makeLines(pp.accRate)
-est.rtMean.Full <- makeLines(pp.rtMean)
-est.rtVar.Full  <- makeLines(pp.rtVar)
-
-
-## Arrange lower and upper percentiles such that we can use polygon() to draw them
-# Accuracy rate
-err.accRate.acc  <- c(pp.perc.accRate[1,1:16],  pp.perc.accRate[2,16:1],
-                      pp.perc.accRate[1,17:32], pp.perc.accRate[2,32:17])
-err.accRate.spd  <- c(pp.perc.accRate[1,33:48], pp.perc.accRate[2,48:33],
-                      pp.perc.accRate[1,49:64], pp.perc.accRate[2,64:49])
-# Mean RT-correct
-err.rtMean.acc  <- c(pp.perc.rtMean[1,1:16],  pp.perc.rtMean[2,16:1],
-                        pp.perc.rtMean[1,17:32], pp.perc.rtMean[2,32:17])
-err.rtMean.spd  <- c(pp.perc.rtMean[1,33:48], pp.perc.rtMean[2,48:33], 
-                        pp.perc.rtMean[1,49:64], pp.perc.rtMean[2,64:49])
-# RT-correct Variance
-err.rtVar.acc  <- c(pp.perc.rtVar[1,1:16],  pp.perc.rtVar[2,16:1],
-                       pp.perc.rtVar[1,17:32], pp.perc.rtVar[2,32:17])
-err.rtVar.spd  <- c(pp.perc.rtVar[1,33:48], pp.perc.rtVar[2,48:33],
-                       pp.perc.rtVar[1,49:64], pp.perc.rtVar[2,64:49])
-```
-
-```{r, fig.align='center', out.width="100%", echo=FALSE}
-par(pty="m", mfrow = c(1,1), mai=c(1.1,0.6,0.5,0), oma= c(0,0,0,0))
-data.color  <- "black"
-point.size <- 0.9
-error.color <- "#E69FF8"
-pred.color <- "#BE07C1"
-
-predAccuracy_plot(accRate, est.accRate.Full, err.accRate.acc, err.accRate.spd)
-```
-
-```{r, fig.align='center', out.width="100%", echo=FALSE}
-par(pty="m", mfrow = c(1,1), mai=c(1.1,0.6,0.5,0), oma= c(0,0,0,0))
-error.color <- "#6DFA9C"
-pred.color <- "#00A437"
-point.size <- 0.9
-
-predMeanRT_plot(est.rtMean.Full, meanRT, err.rtMean.acc, err.rtMean.spd)
-```
-
-```{r, fig.align='center', out.width="100%", echo=FALSE}
-par(pty="m", mfrow = c(1,1), mai=c(1.1,0.6,0.5,0), oma= c(0,0,0,0))
-error.color <- "#8CE0FF"
-pred.color <- "#095B79"
 
 
 predVarRT_plot(varRT, est.rtVar.Full, err.rtVar.acc, err.rtVar.spd)
