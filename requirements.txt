@@ -23,7 +23,7 @@ fastjsonschema==2.16.3
 fonttools==4.39.2
 h5netcdf==1.1.0
 h5py==3.8.0
-idna==3.4
+idna==3.19
 importlib-metadata==6.1.0
 importlib-resources==5.12.0
 inflect==6.0.2
